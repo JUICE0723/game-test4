@@ -60,7 +60,7 @@ export default function Lobby({ onJoin }: LobbyProps) {
               type="text"
               value={roomId}
               onChange={(e) => setRoomId(e.target.value.toUpperCase())}
-              placeholder="ROOM CODE"
+              placeholder="ROOM"
               className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-3 text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 transition-all font-mono uppercase"
               maxLength={6}
             />

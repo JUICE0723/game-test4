@@ -11,6 +11,17 @@
   .mask-fade-edges {
     mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
   }
+  @keyframes spin-reverse {
+    from {
+      transform: rotate(360deg);
+    }
+    to {
+      transform: rotate(0deg);
+    }
+  }
+  .animate-spin-reverse {
+    animation: spin-reverse 1s linear infinite;
+  }
 }
 
 body {

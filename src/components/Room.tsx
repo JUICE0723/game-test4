@@ -71,7 +71,22 @@ export default function Room({ roomData, username }: RoomProps) {
     }
   };
 
-  if (!roomData) return null;
+  if (!roomData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] space-y-6">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-indigo-500/10 border-t-indigo-400/50 rounded-full animate-spin-reverse" />
+          </div>
+        </div>
+        <div className="text-center space-y-2">
+          <h3 className="text-xl font-bold text-zinc-100">Connecting to Room...</h3>
+          <p className="text-zinc-500 text-sm animate-pulse">Syncing rhythm data with the server</p>
+        </div>
+      </div>
+    );
+  }
 
   const me = roomData.players.find((p: any) => p.username === username);
   const allReady = roomData.players.length > 0 && roomData.players.every((p: any) => p.ready);
