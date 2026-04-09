@@ -37,7 +37,7 @@ async function processAudioBuffer(audioBuffer: AudioBuffer): Promise<{ buffer: A
   const sampleRate = audioBuffer.sampleRate;
   
   const peaks: { time: number, zcr: number }[] = [];
-  const minPeakDistance = sampleRate * 0.15; // 150ms minimum gap
+  const minPeakDistance = sampleRate * 0.3; // 300ms minimum gap (Increased from 150ms for lower density)
   const blockSize = sampleRate * 1; // 1 second blocks
   
   for (let blockStart = 0; blockStart < channelData.length; blockStart += blockSize) {
@@ -59,11 +59,14 @@ async function processAudioBuffer(audioBuffer: AudioBuffer): Promise<{ buffer: A
     for (let i = blockStart; i < blockEnd; i++) {
       if (Math.abs(channelData[i]) > threshold) {
         if (i - lastPeakTime > minPeakDistance) {
-          peaks.push({
-            time: i / sampleRate,
-            zcr: getZCR(channelData, i, 2048)
-          });
-          lastPeakTime = i;
+          // Randomly skip to make the chart less dense
+          if (Math.random() > 0.25) { 
+            peaks.push({
+              time: i / sampleRate,
+              zcr: getZCR(channelData, i, 2048)
+            });
+            lastPeakTime = i;
+          }
         }
       }
     }

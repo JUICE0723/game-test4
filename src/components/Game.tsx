@@ -240,8 +240,8 @@ export default function Game({ roomData, username }: GameProps) {
     }
 
     // Draw notes
-    const speed = 400 * speedMultiplier; // pixels per second
-    const lookahead = 2; // seconds
+    const speed = 250 * speedMultiplier; // pixels per second (Reduced from 400 for slower gameplay)
+    const lookahead = 3; // seconds (Increased to see notes earlier)
 
     ctx.font = 'bold 24px Inter, sans-serif';
     ctx.textAlign = 'center';
