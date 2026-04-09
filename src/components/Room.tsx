@@ -15,11 +15,28 @@ export default function Room({ roomData, username }: RoomProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    socket.on('track_ready', (data) => {
+    socket.on('track_ready', async (data) => {
       setAudioInfo({ name: data.name, bpm: data.bpm });
       (window as any).__gameNotes = data.notes;
-      // Note: Other players won't hear the audio unless we sync the file itself,
-      // but they will see the notes and can play the rhythm!
+      
+      // Load audio for other players
+      try {
+        if (data.url) {
+          setIsProcessing(true);
+          const { buffer } = await processAudioFromUrl(data.url);
+          (window as any).__gameAudioBuffer = buffer;
+          setIsProcessing(false);
+        } else if (data.audioData) {
+          setIsProcessing(true);
+          const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const buffer = await audioContext.decodeAudioData(data.audioData);
+          (window as any).__gameAudioBuffer = buffer;
+          setIsProcessing(false);
+        }
+      } catch (error) {
+        console.error('Failed to load audio for player:', error);
+        setIsProcessing(false);
+      }
     });
 
     return () => {
@@ -44,7 +61,8 @@ export default function Room({ roomData, username }: RoomProps) {
       (window as any).__gameAudioBuffer = buffer;
       (window as any).__gameNotes = notes;
       
-      socket.emit('track_ready', { roomId: roomData.id, notes, bpm, name: file.name });
+      const fileData = await file.arrayBuffer();
+      socket.emit('track_ready', { roomId: roomData.id, notes, bpm, name: file.name, audioData: fileData });
     } catch (error) {
       console.error('Error processing audio:', error);
       alert('Failed to process audio file.');
@@ -62,7 +80,7 @@ export default function Room({ roomData, username }: RoomProps) {
       (window as any).__gameAudioBuffer = buffer;
       (window as any).__gameNotes = notes;
       
-      socket.emit('track_ready', { roomId: roomData.id, notes, bpm, name: song.title });
+      socket.emit('track_ready', { roomId: roomData.id, notes, bpm, name: song.title, url: song.url });
     } catch (error) {
       console.error('Error processing default song:', error);
       alert('Failed to load default song. Check your connection.');

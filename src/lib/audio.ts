@@ -19,80 +19,108 @@ export async function processAudioFromUrl(url: string): Promise<{ buffer: AudioB
   return processAudioBuffer(audioBuffer);
 }
 
+function getZCR(channelData: Float32Array, centerIndex: number, windowSize: number = 2048): number {
+  let zcr = 0;
+  const start = Math.max(0, Math.floor(centerIndex - windowSize / 2));
+  const end = Math.min(channelData.length - 1, Math.floor(centerIndex + windowSize / 2));
+  for (let i = start + 1; i <= end; i++) {
+    if ((channelData[i] >= 0 && channelData[i - 1] < 0) || (channelData[i] < 0 && channelData[i - 1] >= 0)) {
+      zcr++;
+    }
+  }
+  return zcr;
+}
+
 async function processAudioBuffer(audioBuffer: AudioBuffer): Promise<{ buffer: AudioBuffer, notes: RhythmNote[], bpm: number }> {
-  // Simple peak detection for beat mapping
+  // Advanced peak detection with Pitch/Timbre estimation using Zero-Crossing Rate
   const channelData = audioBuffer.getChannelData(0);
   const sampleRate = audioBuffer.sampleRate;
   
-  // Find peaks
-  const peaks = [];
-  const threshold = 0.8; // Adjust threshold based on audio
-  const minPeakDistance = sampleRate * 0.2; // Minimum 0.2s between peaks
+  const peaks: { time: number, zcr: number }[] = [];
+  const minPeakDistance = sampleRate * 0.15; // 150ms minimum gap
+  const blockSize = sampleRate * 1; // 1 second blocks
   
-  let lastPeakTime = 0;
-  for (let i = 0; i < channelData.length; i++) {
-    if (Math.abs(channelData[i]) > threshold) {
-      if (i - lastPeakTime > minPeakDistance) {
-        peaks.push(i / sampleRate);
-        lastPeakTime = i;
+  for (let blockStart = 0; blockStart < channelData.length; blockStart += blockSize) {
+    const blockEnd = Math.min(channelData.length, blockStart + blockSize);
+    
+    let blockMax = 0;
+    for (let i = blockStart; i < blockEnd; i++) {
+      const val = Math.abs(channelData[i]);
+      if (val > blockMax) blockMax = val;
+    }
+    
+    if (blockMax < 0.1) continue;
+    
+    // Dynamic threshold based on local intensity
+    const threshold = blockMax * 0.80; 
+    
+    let lastPeakTime = peaks.length > 0 ? peaks[peaks.length - 1].time * sampleRate : 0;
+    
+    for (let i = blockStart; i < blockEnd; i++) {
+      if (Math.abs(channelData[i]) > threshold) {
+        if (i - lastPeakTime > minPeakDistance) {
+          peaks.push({
+            time: i / sampleRate,
+            zcr: getZCR(channelData, i, 2048)
+          });
+          lastPeakTime = i;
+        }
       }
     }
   }
 
-  // If no peaks found, generate synthetic beats based on a default BPM
   let bpm = 120;
-  if (peaks.length > 2) {
-    // Calculate intervals
+  if (peaks.length > 10) {
     const intervals = [];
     for (let i = 1; i < peaks.length; i++) {
-      intervals.push(peaks[i] - peaks[i - 1]);
+      intervals.push(peaks[i].time - peaks[i - 1].time);
     }
-    // Find most common interval
-    const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    bpm = Math.round(60 / avgInterval);
+    intervals.sort((a, b) => a - b);
+    const medianInterval = intervals[Math.floor(intervals.length / 2)];
+    if (medianInterval > 0) {
+      bpm = Math.round(60 / medianInterval);
+      while (bpm < 70) bpm *= 2;
+      while (bpm > 200) bpm /= 2;
+    }
   }
 
-  // Generate RhythmCode patterns
   const notes: RhythmNote[] = [];
-  const patterns = [
-    [1], [2], [3], [4], [5], [6], [7], [8], [9],
-    [1, 1], [2, 2], [3, 3], [4, 4], [5, 5],
-    [1, 2, 1], [2, 3, 2], [3, 4, 3], [4, 5, 4],
-    [1, 1, 1], [2, 2, 2], [3, 3, 3]
-  ];
 
-  // If we have peaks, use them, otherwise generate based on BPM
-  const beatTimes = peaks.length > 10 ? peaks : generateBeats(audioBuffer.duration, bpm);
+  if (peaks.length > 10) {
+    let minZCR = Infinity;
+    let maxZCR = -Infinity;
+    for (const p of peaks) {
+      if (p.zcr < minZCR) minZCR = p.zcr;
+      if (p.zcr > maxZCR) maxZCR = p.zcr;
+    }
+    
+    if (maxZCR === minZCR) maxZCR = minZCR + 1;
 
-  let i = 0;
-  while (i < beatTimes.length) {
-    const time = beatTimes[i];
-    
-    // Randomly select a pattern
-    const pattern = patterns[Math.floor(Math.random() * patterns.length)];
-    
-    // Check if we have enough beats left for this pattern
-    if (i + pattern.length <= beatTimes.length) {
-      // Group them as a combo starting at 'time'
-      for (let j = 0; j < pattern.length; j++) {
-        notes.push({
-          time: beatTimes[i + j],
-          number: pattern[j],
-          length: pattern.length
-        });
-      }
-      i += pattern.length;
-    } else {
+    for (const p of peaks) {
+      // Map ZCR (pitch heuristic) to 1-9
+      const normalized = (p.zcr - minZCR) / (maxZCR - minZCR);
+      const eased = Math.pow(normalized, 0.8); // Natural spread
+      const noteNum = Math.min(9, Math.max(1, Math.floor(eased * 8) + 1));
+      
+      notes.push({
+        time: p.time,
+        number: noteNum,
+        length: 1
+      });
+    }
+  } else {
+    // Fallback for silent tracks
+    const beatTimes = generateBeats(audioBuffer.duration, bpm);
+    for (let i = 0; i < beatTimes.length; i++) {
       notes.push({
         time: beatTimes[i],
         number: Math.floor(Math.random() * 9) + 1,
         length: 1
       });
-      i++;
     }
   }
 
-  return { buffer: audioBuffer, notes, bpm };
+  return { buffer: audioBuffer, notes, bpm: Math.round(bpm) };
 }
 
 function generateBeats(duration: number, bpm: number): number[] {

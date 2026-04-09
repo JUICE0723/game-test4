@@ -18,6 +18,7 @@ export default function Game({ roomData, username }: GameProps) {
   const [maxCombo, setMaxCombo] = useState(0);
   const [accuracy, setAccuracy] = useState(100);
   const [judgement, setJudgement] = useState<Judgement>(null);
+  const stateRef = useRef({ score: 0, combo: 0, maxCombo: 0, accuracy: 100 });
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -55,6 +56,7 @@ export default function Game({ roomData, username }: GameProps) {
       sourceRef.current = audioCtxRef.current.createBufferSource();
       sourceRef.current.buffer = buffer;
       sourceRef.current.playbackRate.value = speedMultiplier;
+      sourceRef.current.loop = false;
       sourceRef.current.connect(audioCtxRef.current.destination);
       sourceRef.current.start(startTimeRef.current);
     } else {
@@ -132,46 +134,54 @@ export default function Game({ roomData, username }: GameProps) {
 
       hitStatsRef.current.total++;
 
+      let newScore = stateRef.current.score;
+      let newCombo = stateRef.current.combo;
+      let newMaxCombo = stateRef.current.maxCombo;
+
       if (currentJudgement === 'Miss') {
-        setCombo(0);
+        newCombo = 0;
       } else {
-        setCombo(c => {
-          const newCombo = c + 1;
-          setMaxCombo(m => Math.max(m, newCombo));
-          return newCombo;
-        });
-        setScore(s => s + points + (combo * 10)); // Combo bonus
+        newCombo += 1;
+        newMaxCombo = Math.max(newMaxCombo, newCombo);
+        newScore += points + (stateRef.current.combo * 10);
       }
 
+      stateRef.current = { ...stateRef.current, score: newScore, combo: newCombo, maxCombo: newMaxCombo };
+      setCombo(newCombo);
+      setMaxCombo(newMaxCombo);
+      setScore(newScore);
       setJudgement(currentJudgement);
       
       // Clear judgement after a short delay
       setTimeout(() => setJudgement(null), 500);
 
-      updateAccuracy();
+      updateAccuracy(newScore, newCombo, newMaxCombo);
     } else {
       // Pressed wrong key
+      let newCombo = 0;
+      stateRef.current = { ...stateRef.current, combo: newCombo };
       setJudgement('Miss');
-      setCombo(0);
+      setCombo(newCombo);
       hitStatsRef.current.miss++;
       hitStatsRef.current.total++;
-      updateAccuracy();
+      updateAccuracy(stateRef.current.score, newCombo, stateRef.current.maxCombo);
       setTimeout(() => setJudgement(null), 500);
     }
   };
 
-  const updateAccuracy = () => {
+  const updateAccuracy = (currentScore: number, currentCombo: number, currentMaxCombo: number) => {
     const stats = hitStatsRef.current;
     if (stats.total === 0) return;
     const acc = ((stats.perfect * 300 + stats.good * 100) / (stats.total * 300)) * 100;
+    stateRef.current.accuracy = acc;
     setAccuracy(acc);
     
     // Sync with server
     socket.emit('update_score', {
       roomId: roomData.id,
-      score: score,
-      combo: combo,
-      maxCombo: maxCombo,
+      score: currentScore,
+      combo: currentCombo,
+      maxCombo: currentMaxCombo,
       accuracy: acc
     });
   };
@@ -209,10 +219,12 @@ export default function Game({ roomData, username }: GameProps) {
         // Note passed without being hit
         hitStatsRef.current.miss++;
         hitStatsRef.current.total++;
-        setCombo(0);
+        let newCombo = 0;
+        stateRef.current = { ...stateRef.current, combo: newCombo };
+        setCombo(newCombo);
         setJudgement('Miss');
         setTimeout(() => setJudgement(null), 500);
-        updateAccuracy();
+        updateAccuracy(stateRef.current.score, newCombo, stateRef.current.maxCombo);
         return false;
       }
       return true;
