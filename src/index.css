@@ -42,6 +42,15 @@
   .animate-spin-reverse {
     animation: spin-reverse 1s linear infinite;
   }
+  @keyframes judgement {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.8) translateY(20px); filter: brightness(1.5); }
+    15% { opacity: 1; transform: translate(-50%, -50%) scale(1) translateY(0px); filter: brightness(1.2); }
+    80% { opacity: 1; transform: translate(-50%, -50%) scale(1) translateY(0px); filter: brightness(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(1.1) translateY(-10px); filter: brightness(0.8); }
+  }
+  .animate-judgement {
+    animation: judgement 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
 }
 
 body {

@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { socket } from '../lib/socket';
 import { RhythmNote } from '../lib/audio';
-import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, ArrowLeft } from 'lucide-react';
 
 interface GameProps {
@@ -74,7 +73,11 @@ export default function Game({ roomData, username }: GameProps) {
     // Game Loop
     let animationFrameId: number;
     const render = () => {
-      drawGame(speedMultiplier);
+      try {
+        drawGame(speedMultiplier);
+      } catch (e) {
+        console.error("Game loop error:", e);
+      }
       animationFrameId = requestAnimationFrame(render);
     };
     render();
@@ -384,24 +387,18 @@ export default function Game({ roomData, username }: GameProps) {
           <canvas ref={canvasRef} className="w-full h-full block" />
           
           {/* Judgement Overlay */}
-          <AnimatePresence mode="wait">
-            {judgement && (
-              <motion.div
-                key={judgement + hitStatsRef.current.total}
-                initial={{ opacity: 0, scale: 0.8, y: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 1.2 }}
-                transition={{ duration: 0.2 }}
-                className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl font-black tracking-widest uppercase ${
-                  judgement === 'Perfect' ? 'text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.5)]' :
-                  judgement === 'Good' ? 'text-indigo-400 drop-shadow-[0_0_15px_rgba(129,140,248,0.5)]' :
-                  'text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]'
-                }`}
-              >
-                {judgement}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {judgement && (
+            <div
+              key={judgement + hitStatsRef.current.total}
+              className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-4xl font-black tracking-widest uppercase animate-judgement ${
+                judgement === 'Perfect' ? 'text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.5)]' :
+                judgement === 'Good' ? 'text-indigo-400 drop-shadow-[0_0_15px_rgba(129,140,248,0.5)]' :
+                'text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]'
+              }`}
+            >
+              {judgement}
+            </div>
+          )}
 
           {/* Input Hint */}
           <div className="absolute bottom-4 left-0 w-full text-center text-zinc-500 text-sm font-medium tracking-widest uppercase">
