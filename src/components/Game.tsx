@@ -18,6 +18,7 @@ export default function Game({ roomData, username }: GameProps) {
   const [maxCombo, setMaxCombo] = useState(0);
   const [accuracy, setAccuracy] = useState(100);
   const [judgement, setJudgement] = useState<Judgement>(null);
+  const judgementTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const stateRef = useRef({ score: 0, combo: 0, maxCombo: 0, accuracy: 100 });
   
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -160,8 +161,9 @@ export default function Game({ roomData, username }: GameProps) {
       setScore(newScore);
       setJudgement(currentJudgement);
       
-      // Clear judgement after a short delay
-      setTimeout(() => setJudgement(null), 500);
+      // Clear judgement after a short delay (debounce)
+      if (judgementTimeoutRef.current) clearTimeout(judgementTimeoutRef.current);
+      judgementTimeoutRef.current = setTimeout(() => setJudgement(null), 500);
 
       updateAccuracy(newScore, newCombo, newMaxCombo);
     } else {
@@ -173,7 +175,8 @@ export default function Game({ roomData, username }: GameProps) {
       hitStatsRef.current.miss++;
       hitStatsRef.current.total++;
       updateAccuracy(stateRef.current.score, newCombo, stateRef.current.maxCombo);
-      setTimeout(() => setJudgement(null), 500);
+      if (judgementTimeoutRef.current) clearTimeout(judgementTimeoutRef.current);
+      judgementTimeoutRef.current = setTimeout(() => setJudgement(null), 500);
     }
   };
 
@@ -200,11 +203,13 @@ export default function Game({ roomData, username }: GameProps) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Handle resize
+    // Handle resize smartly to avoid massive GPU reallocation memory leak causing freezes
     const rect = canvas.parentElement?.getBoundingClientRect();
     if (rect) {
-      canvas.width = rect.width;
-      canvas.height = rect.height;
+      if (canvas.width !== rect.width || canvas.height !== rect.height) {
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+      }
     }
 
     const currentTime = (audioCtxRef.current.currentTime - startTimeRef.current) * speedMultiplier;
@@ -231,7 +236,8 @@ export default function Game({ roomData, username }: GameProps) {
         stateRef.current = { ...stateRef.current, combo: newCombo };
         setCombo(newCombo);
         setJudgement('Miss');
-        setTimeout(() => setJudgement(null), 500);
+        if (judgementTimeoutRef.current) clearTimeout(judgementTimeoutRef.current);
+        judgementTimeoutRef.current = setTimeout(() => setJudgement(null), 500);
         updateAccuracy(stateRef.current.score, newCombo, stateRef.current.maxCombo);
         return false;
       }
@@ -376,9 +382,10 @@ export default function Game({ roomData, username }: GameProps) {
           <canvas ref={canvasRef} className="w-full h-full block" />
           
           {/* Judgement Overlay */}
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {judgement && (
               <motion.div
+                key={judgement + hitStatsRef.current.total}
                 initial={{ opacity: 0, scale: 0.8, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 1.2 }}
