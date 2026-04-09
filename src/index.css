@@ -8,6 +8,26 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+  
+  /* Custom Scrollbar for Song List */
+  ::-webkit-scrollbar {
+    height: 6px;
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #27272a;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #4f46e5;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #27272a transparent;
+  }
   .mask-fade-edges {
     mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
   }

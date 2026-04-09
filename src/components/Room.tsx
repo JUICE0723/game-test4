@@ -178,7 +178,15 @@ export default function Room({ roomData, username }: RoomProps) {
           <div className="space-y-6">
             <div className="flex flex-col gap-4">
               <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider">Default Tracks</p>
-              <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar -mx-2 px-2 mask-fade-edges">
+              <div 
+                className="flex gap-4 overflow-x-auto pb-6 -mx-2 px-2 mask-fade-edges scroll-smooth"
+                onWheel={(e) => {
+                  if (e.deltaY !== 0) {
+                    e.currentTarget.scrollLeft += e.deltaY;
+                    e.preventDefault();
+                  }
+                }}
+              >
                 {DEFAULT_SONGS.map((song) => (
                   <button
                     key={song.id}
