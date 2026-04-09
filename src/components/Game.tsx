@@ -206,9 +206,11 @@ export default function Game({ roomData, username }: GameProps) {
     // Handle resize smartly to avoid massive GPU reallocation memory leak causing freezes
     const rect = canvas.parentElement?.getBoundingClientRect();
     if (rect) {
-      if (canvas.width !== rect.width || canvas.height !== rect.height) {
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+      const newWidth = Math.floor(rect.width);
+      const newHeight = Math.floor(rect.height);
+      if (canvas.width !== newWidth || canvas.height !== newHeight) {
+        canvas.width = newWidth;
+        canvas.height = newHeight;
       }
     }
 
