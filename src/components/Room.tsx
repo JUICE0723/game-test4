@@ -107,6 +107,7 @@ export default function Room({ roomData, username }: RoomProps) {
   }
 
   const me = roomData.players.find((p: any) => p.username === username);
+  const isHost = roomData.players[0]?.username === username;
   const allReady = roomData.players.length > 0 && roomData.players.every((p: any) => p.ready);
 
   return (
@@ -148,11 +149,13 @@ export default function Room({ roomData, username }: RoomProps) {
             {[1.0, 1.5, 2.0].map(speed => (
               <button
                 key={speed}
-                onClick={() => socket.emit('update_speed', { roomId: roomData.id, speed })}
+                onClick={() => { if (isHost) socket.emit('update_speed', { roomId: roomData.id, speed }); }}
                 className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                   roomData.speed === speed 
                     ? 'bg-indigo-500 text-white shadow-sm' 
-                    : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                    : isHost 
+                      ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 cursor-pointer' 
+                      : 'text-zinc-600 cursor-not-allowed'
                 }`}
               >
                 {speed.toFixed(1)}x
@@ -167,14 +170,16 @@ export default function Room({ roomData, username }: RoomProps) {
               <p className="font-medium text-indigo-300 truncate max-w-[200px] sm:max-w-xs">{audioInfo.name}</p>
               <p className="text-sm text-indigo-400/70">Detected BPM: {audioInfo.bpm}</p>
             </div>
-            <button 
-              onClick={() => setAudioInfo(null)}
-              className="text-sm text-zinc-400 hover:text-zinc-200"
-            >
-              Change
-            </button>
+            {isHost && (
+              <button 
+                onClick={() => setAudioInfo(null)}
+                className="text-sm text-zinc-400 hover:text-zinc-200"
+              >
+                Change
+              </button>
+            )}
           </div>
-        ) : (
+        ) : isHost ? (
           <div className="space-y-6">
             <div className="flex flex-col gap-4">
               <p className="text-sm font-medium text-zinc-500 uppercase tracking-wider">Default Tracks</p>
@@ -257,6 +262,13 @@ export default function Room({ roomData, username }: RoomProps) {
                 </div>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="py-12 text-center flex flex-col items-center justify-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-zinc-800/50 flex flex-col items-center justify-center animate-pulse">
+              <Music className="w-6 h-6 text-zinc-500" />
+            </div>
+            <p className="text-zinc-400">Waiting for Host ({roomData.players[0]?.username || '...'}) to select a track...</p>
           </div>
         )}
       </div>

@@ -52,6 +52,10 @@ async function startServer() {
       }
 
       io.to(roomId).emit('room_update', room);
+
+      if (room.track) {
+        socket.emit('track_ready', room.track);
+      }
     });
 
     socket.on('leave_room', (roomId) => {
@@ -84,11 +88,11 @@ async function startServer() {
       }
     });
 
-    socket.on('track_ready', ({ roomId, notes, bpm, name }) => {
+    socket.on('track_ready', ({ roomId, notes, bpm, name, url, audioData }) => {
       const room = rooms.get(roomId);
       if (room) {
-        room.track = { name, bpm };
-        socket.to(roomId).emit('track_ready', { notes, bpm, name });
+        room.track = { notes, bpm, name, url, audioData };
+        socket.to(roomId).emit('track_ready', { notes, bpm, name, url, audioData });
       }
     });
 
