@@ -22,6 +22,7 @@ export default function Game({ roomData, username }: GameProps) {
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioStartedRef = useRef(false);
   const startTimeRef = useRef<number>(0);
   const notesRef = useRef<RhythmNote[]>([]);
   const activeNotesRef = useRef<RhythmNote[]>([]);
@@ -44,22 +45,28 @@ export default function Game({ roomData, username }: GameProps) {
     notesRef.current = [...notes].sort((a, b) => a.time - b.time);
     activeNotesRef.current = [...notesRef.current];
 
-    // Setup Audio
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    audioCtxRef.current = new AudioContext();
-    
-    startTimeRef.current = audioCtxRef.current.currentTime + 2; // 2 seconds delay
+    // Setup Audio if not already started
+    if (!audioStartedRef.current) {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      audioCtxRef.current = new AudioContext();
+      // Unblock context in advance if possible
+      if (audioCtxRef.current.state === 'suspended') {
+        audioCtxRef.current.resume();
+      }
+      startTimeRef.current = audioCtxRef.current.currentTime + 2; // 2 seconds delay
+    }
 
     const speedMultiplier = roomData.speed || 1.0;
 
-    if (buffer) {
+    if (buffer && !audioStartedRef.current) {
+      audioStartedRef.current = true;
       sourceRef.current = audioCtxRef.current.createBufferSource();
       sourceRef.current.buffer = buffer;
       sourceRef.current.playbackRate.value = speedMultiplier;
       sourceRef.current.loop = false;
       sourceRef.current.connect(audioCtxRef.current.destination);
       sourceRef.current.start(startTimeRef.current);
-    } else {
+    } else if (!buffer) {
       console.warn("No audio buffer found. Playing silently.");
     }
 
@@ -99,7 +106,7 @@ export default function Game({ roomData, username }: GameProps) {
     const currentTime = (audioCtxRef.current.currentTime - startTimeRef.current) * speedMultiplier;
     
     // Find the closest note for this key within the hit window
-    const hitWindow = 0.2; // 200ms
+    const hitWindow = 0.4; // Increased hit window (400ms range)
     
     // Look at the next few notes
     const upcomingNotes = activeNotesRef.current.filter(n => n.time >= currentTime - hitWindow && n.time <= currentTime + hitWindow);
@@ -119,11 +126,12 @@ export default function Game({ roomData, username }: GameProps) {
       let currentJudgement: Judgement = 'Miss';
       let points = 0;
 
-      if (timeDiff <= 0.05) { // 50ms Perfect
+      // Range 加大：正中間完美，旁邊 GOOD，完全沒按到（超出範圍）為 MISS
+      if (timeDiff <= 0.1) { // <= 100ms: Perfect (Center)
         currentJudgement = 'Perfect';
         points = 300;
         hitStatsRef.current.perfect++;
-      } else if (timeDiff <= 0.1) { // 100ms Good
+      } else if (timeDiff <= 0.4) { // <= 400ms: Good (Edges)
         currentJudgement = 'Good';
         points = 100;
         hitStatsRef.current.good++;
@@ -213,9 +221,9 @@ export default function Game({ roomData, username }: GameProps) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Check for missed notes
+    // Check for missed notes (when completely missed the extended 400ms range)
     activeNotesRef.current = activeNotesRef.current.filter(note => {
-      if (note.time < currentTime - 0.2) {
+      if (note.time < currentTime - 0.4) {
         // Note passed without being hit
         hitStatsRef.current.miss++;
         hitStatsRef.current.total++;
