@@ -19,6 +19,8 @@ export default function Game({ roomData, username }: GameProps) {
   const [judgement, setJudgement] = useState<Judgement>(null);
   const judgementTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const stateRef = useRef({ score: 0, combo: 0, maxCombo: 0, accuracy: 100 });
+  const latestRoomData = useRef(roomData);
+  latestRoomData.current = roomData;
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -30,7 +32,7 @@ export default function Game({ roomData, username }: GameProps) {
   const gameOverEmitted = useRef(false);
 
   useEffect(() => {
-    if (roomData.status === 'finished') return;
+    if (latestRoomData.current.status === 'finished') return;
 
     // Initialize game
     const buffer = (window as any).__gameAudioBuffer as AudioBuffer | undefined;
@@ -38,7 +40,7 @@ export default function Game({ roomData, username }: GameProps) {
 
     if (!notes) {
       alert('No rhythm data loaded! Returning to room.');
-      socket.emit('game_over', { roomId: roomData.id });
+      socket.emit('game_over', { roomId: latestRoomData.current.id });
       return;
     }
 
@@ -56,13 +58,13 @@ export default function Game({ roomData, username }: GameProps) {
       startTimeRef.current = audioCtxRef.current.currentTime + 2; // 2 seconds delay
     }
 
-    const speedMultiplier = roomData.speed || 1.0;
+    const initialSpeed = latestRoomData.current.speed || 1.0;
 
     if (buffer && !audioStartedRef.current) {
       audioStartedRef.current = true;
       sourceRef.current = audioCtxRef.current.createBufferSource();
       sourceRef.current.buffer = buffer;
-      sourceRef.current.playbackRate.value = speedMultiplier;
+      sourceRef.current.playbackRate.value = initialSpeed;
       sourceRef.current.loop = false;
       sourceRef.current.connect(audioCtxRef.current.destination);
       sourceRef.current.start(startTimeRef.current);
@@ -74,10 +76,11 @@ export default function Game({ roomData, username }: GameProps) {
     let animationFrameId: number;
     const render = () => {
       try {
-        drawGame(speedMultiplier);
+        drawGame();
       } catch (e) {
         console.error("Game loop error:", e);
       }
+      // Continue loop unconditionally 
       animationFrameId = requestAnimationFrame(render);
     };
     render();
@@ -87,27 +90,37 @@ export default function Game({ roomData, username }: GameProps) {
       const key = parseInt(e.key);
       if (isNaN(key) || key < 1 || key > 9) return;
 
-      handleInput(key, speedMultiplier);
+      handleInput(key);
     };
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       cancelAnimationFrame(animationFrameId);
-      if (sourceRef.current) {
-        try { sourceRef.current.stop(); } catch (e) {}
-      }
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close();
+      // Only close if completely finished
+      if (latestRoomData.current.status === 'finished') {
+        if (sourceRef.current) { try { sourceRef.current.stop(); } catch (e) {} }
+        if (audioCtxRef.current) { audioCtxRef.current.close().catch(()=>{}); }
       }
     };
+  }, []); // Empty dependencies ensures loop never halts from re-renders
+
+  useEffect(() => {
+    // Secondary effect independently watches for 'finished' status to shutdown audio
+    if (roomData.status === 'finished') {
+      if (sourceRef.current) { try { sourceRef.current.stop(); } catch(e){} }
+      if (audioCtxRef.current && audioCtxRef.current.state !== 'closed') {
+        audioCtxRef.current.close().catch(()=>{});
+      }
+    }
   }, [roomData.status]);
 
-  const handleInput = (key: number, speedMultiplier: number) => {
+  const handleInput = (key: number) => {
     if (!audioCtxRef.current) return;
     
     // Calculate current time based on playback rate
-    const currentTime = (audioCtxRef.current.currentTime - startTimeRef.current) * speedMultiplier;
+    const speed = latestRoomData.current.speed || 1.0;
+    const currentTime = (audioCtxRef.current.currentTime - startTimeRef.current) * speed;
     
     // Find the closest note for this key within the hit window
     const hitWindow = 0.4; // Increased hit window (400ms range)
@@ -192,7 +205,7 @@ export default function Game({ roomData, username }: GameProps) {
     
     // Sync with server
     socket.emit('update_score', {
-      roomId: roomData.id,
+      roomId: latestRoomData.current.id,
       score: currentScore,
       combo: currentCombo,
       maxCombo: currentMaxCombo,
@@ -200,11 +213,13 @@ export default function Game({ roomData, username }: GameProps) {
     });
   };
 
-  const drawGame = (speedMultiplier: number) => {
+  const drawGame = () => {
     const canvas = canvasRef.current;
     if (!canvas || !audioCtxRef.current) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const speedOptions = latestRoomData.current.speed || 1.0;
 
     // Handle resize smartly to avoid massive GPU reallocation memory leak causing freezes
     const rect = canvas.parentElement?.getBoundingClientRect();
@@ -217,7 +232,7 @@ export default function Game({ roomData, username }: GameProps) {
       }
     }
 
-    const currentTime = (audioCtxRef.current.currentTime - startTimeRef.current) * speedMultiplier;
+    const currentTime = (audioCtxRef.current.currentTime - startTimeRef.current) * speedOptions;
 
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -255,11 +270,11 @@ export default function Game({ roomData, username }: GameProps) {
     
     if (currentTime > audioDuration + 1 && !gameOverEmitted.current) {
       gameOverEmitted.current = true;
-      socket.emit('game_over', { roomId: roomData.id });
+      socket.emit('game_over', { roomId: latestRoomData.current.id });
     }
 
     // Draw notes
-    const speed = 250 * speedMultiplier; // pixels per second (Reduced from 400 for slower gameplay)
+    const speed = 250 * speedOptions; // pixels per second (Reduced from 400 for slower gameplay)
     const lookahead = 3; // seconds (Increased to see notes earlier)
 
     ctx.font = 'bold 24px Inter, sans-serif';
