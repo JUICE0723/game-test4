@@ -24,6 +24,7 @@ export default function Game({ roomData, username }: GameProps) {
   
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const robotImageRef = useRef<HTMLImageElement | null>(null);
   const audioStartedRef = useRef(false);
   const startTimeRef = useRef<number>(0);
   const notesRef = useRef<RhythmNote[]>([]);
@@ -43,6 +44,13 @@ export default function Game({ roomData, username }: GameProps) {
       socket.emit('game_over', { roomId: latestRoomData.current.id });
       return;
     }
+
+    // Load dancing robot image
+    const img = new Image();
+    img.src = '/assets/robot.png';
+    img.onload = () => {
+      robotImageRef.current = img;
+    };
 
     notesRef.current = [...notes].sort((a, b) => a.time - b.time);
     activeNotesRef.current = [...notesRef.current];
@@ -234,8 +242,54 @@ export default function Game({ roomData, username }: GameProps) {
 
     const currentTime = (audioCtxRef.current.currentTime - startTimeRef.current) * speedOptions;
 
+    // Check for game over (Moved up to give robot the audio Duration context)
+    const buffer = (window as any).__gameAudioBuffer as AudioBuffer | undefined;
+    const audioDuration = buffer ? buffer.duration : (notesRef.current[notesRef.current.length - 1]?.time || 0) + 2;
+
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // ---------- Draw Dancing Robot Background ----------
+    if (robotImageRef.current) {
+      const bpm = latestRoomData.current.track?.bpm || 120;
+      const beatInterval = 60 / bpm;
+      
+      let scale = 1.0;
+      let rotation = 0;
+      let yOffset = 0;
+
+      // Start dancing only during playback
+      if (currentTime >= 0 && currentTime <= audioDuration) {
+        // beatPhase cycles between 0.0 and 1.0 exactly per beat
+        const beatPhase = (currentTime % beatInterval) / beatInterval;
+        
+        // bounce peaks at mid-beat (0.5), drops to 0 on exact beat
+        const bounce = Math.abs(Math.sin(beatPhase * Math.PI)); 
+        scale = 1.0 + bounce * 0.15; // pop out 15%
+        yOffset = -bounce * 40; // jump up 40 pixels
+        
+        // Alternate bounce direction each beat (left/right tilt)
+        const beatCount = Math.floor(currentTime / beatInterval);
+        const direction = (beatCount % 2 === 0) ? 1 : -1;
+        // Tilt slightly at peak of jump
+        rotation = Math.sin(beatPhase * Math.PI) * 0.08 * direction; 
+      }
+
+      ctx.save();
+      // Position center of canvas
+      ctx.translate(canvas.width / 2, canvas.height / 2 + yOffset);
+      ctx.scale(scale, scale);
+      ctx.rotate(rotation);
+      
+      const imgH = canvas.height * 0.7; // 70% of screen height
+      const imgW = imgH * (robotImageRef.current.width / robotImageRef.current.height);
+      
+      ctx.globalAlpha = 0.3; // 0.3 Opacity as requested
+      ctx.globalCompositeOperation = 'screen'; // pure black removes perfectly
+      ctx.drawImage(robotImageRef.current, -imgW / 2, -imgH / 2, imgW, imgH);
+      ctx.restore();
+    }
+    // ---------------------------------------------------
 
     // Draw hit line
     const hitY = canvas.height - 100;
@@ -264,10 +318,6 @@ export default function Game({ roomData, username }: GameProps) {
       return true;
     });
 
-    // Check for game over
-    const buffer = (window as any).__gameAudioBuffer as AudioBuffer | undefined;
-    const audioDuration = buffer ? buffer.duration : (notesRef.current[notesRef.current.length - 1]?.time || 0) + 2;
-    
     if (currentTime > audioDuration + 1 && !gameOverEmitted.current) {
       gameOverEmitted.current = true;
       socket.emit('game_over', { roomId: latestRoomData.current.id });
